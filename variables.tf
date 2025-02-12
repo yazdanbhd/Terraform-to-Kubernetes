@@ -21,8 +21,7 @@ variable "vms" {
       vm_hostname = "vm1"
       memory      = 2048
       vcpu        = 2
-    }
-,
+    },
     "vm2" = {
       vm_hostname = "vm2"
       memory      = 2048
