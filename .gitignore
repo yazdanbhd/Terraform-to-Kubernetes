@@ -1,4 +1,113 @@
+# Terraform
 .terraform.lock.hcl
 terraform.tfstate
 terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
+.terraform/
+*.lock.hcl
+
+# Cloud images
 jammy-server-cloudimg-amd64.img
+*.img
+*.qcow2
+*.vmdk
+
+# Ansible
+*.retry
+**/vagrant_ansible_inventory
+inventory/*/artifacts/
+
+# Development tools
+.vagrant
+.idea
+.vscode
+*.iml
+*.swp
+*.swo
+*~
+*.bak
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+.cache
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+credentials/
+*.tfvars
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*,cover
+.hypothesis/
+
+# Backup files
+*.backup
+*.old
+*.orig
+
+# SSH keys and configs
+ssh-bastion.conf
+*.pem
+*.key
+*.pub
+
+# Kubernetes
+*.kubeconfig
+kubeconfig
+.kube/
+
+# Offline files
+contrib/offline/offline-files/
+contrib/offline/offline-files.tar.gz

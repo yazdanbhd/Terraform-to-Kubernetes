@@ -117,3 +117,76 @@ The script provides the absolute path of the downloaded image, which you can use
 Special thanks to **Molla Salehi** (GitHub: [mm3906078](https://github.com/mm3906078)) for contributions and guidance.
 
 
+
+## Ansible: Deploying Nexus Repository Manager
+
+This repository includes an Ansible role to install and configure Nexus Repository Manager on a host. Two approaches exist in the repo today; the recommended one is the role-based install.
+
+### Structure assessment
+- The `ansible/roles/nexus` role is correctly structured with `tasks/`, `templates/`, `handlers/`, and `defaults/` (added).
+- Inventories live under `ansible/inventory/` with a `nexus/` inventory including `group_vars/nexus.yml`.
+- There are duplicate playbooks for Nexus:
+  - `ansible/deploy-nexus.yml` (role-based on remote host via inventory) — RECOMMENDED
+  - `/deploy-nexus.yml` (imperative localhost flow) — legacy/example
+  - `inventory/nexus/deploy-nexus.yml` (Docker-based Nexus) — optional alternative
+
+Recommendation: Standardize on the role-based playbook with the `ansible/inventory/nexus` inventory. Treat the others as examples or remove them if not needed.
+
+### Prerequisites
+- A reachable Linux host (Ubuntu/Debian or RHEL-like) with Python 3 for Ansible
+- SSH access as a sudo-capable user (configured in inventory)
+- Ansible installed locally
+
+### Inventory
+Edit `ansible/inventory/nexus/inventory.ini` and `ansible/inventory/nexus/group_vars/nexus.yml` as needed. Defaults include:
+- User/group: `nexus`
+- Install dir: `/opt`
+- Data dir: `/opt/sonatype-work/nexus3`
+- UI port: `8081`
+- Admin new password: `ChangeMe_123!` (change this!)
+
+### Run (role-based install)
+From the repo root:
+
+```sh
+ansible-playbook -i ansible/inventory/nexus/inventory.ini ansible/deploy-nexus.yml
+```
+
+What this does:
+- Installs Java and dependencies
+- Downloads and installs Nexus under `/opt`, creates `/opt/nexus` symlink
+- Writes `nexus.properties` with `application-port={{ nexus_ui_port }}`
+- Installs and enables a `systemd` service `nexus`
+- Waits for the UI, rotates the admin password if still default
+- Enables Docker Bearer Token Realm
+- Optionally creates a `docker-hosted` repo if `docker_http_port` is set
+
+Access:
+- Web UI: `http://<your-host>:8081`
+- Username: `admin`
+- Password: the value set in `nexus_admin_new_password` (default rotates from initial)
+
+### Alternative: Run Nexus via Docker
+If you prefer to run Nexus as a container on the target host, an example playbook exists:
+
+```sh
+ansible-playbook -i inventory/nexus/inventory.ini inventory/nexus/deploy-nexus.yml
+```
+
+This will:
+- Install Docker
+- Create `/opt/nexus-data`
+- Run `sonatype/nexus3` with ports `8081` and `5000` exposed
+
+Note: The Docker approach doesn’t perform admin password rotation or REST API configuration. Use the role-based install for full automation.
+
+### Nexus repository configuration (optional)
+To programmatically create proxy/group/raw repositories (for air‑gapped K8s, Docker Hub mirrors, etc.), you can use the example playbook at the repo root:
+
+```sh
+export NEXUS_USER=admin
+export NEXUS_PASSWORD='<your-admin-password>'
+ansible-playbook deploy-nexus.yml
+```
+
+Update `nexus_host` inside that playbook to point to your Nexus URL.
