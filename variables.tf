@@ -6,7 +6,7 @@ variable "ubuntu_18_img_url" {
 variable "disk_size" {
   description = "Disk size in bytes for each VM"
   type        = number
-  default     = 10737418240
+  default     = 21474836480
 }
 
 variable "vms" {
@@ -15,27 +15,35 @@ variable "vms" {
     vm_hostname = string
     memory      = number
     vcpu        = number
+    role        = string
+    disk_size   = number
   }))
   default = {
-    "vm1" = {
-      vm_hostname = "vm1"
-      memory      = 2048
+    "control-plane" = {
+      vm_hostname = "k8s-control-plane"
+      memory      = 4096
       vcpu        = 2
+      role        = "control-plane"
+      disk_size   = 21474836480
     },
-    "vm2" = {
-      vm_hostname = "vm2"
-      memory      = 2048
+    "worker1" = {
+      vm_hostname = "k8s-worker1"
+      memory      = 4096
       vcpu        = 2
-    },
-    "vm3" = {
-      vm_hostname = "vm3"
-      memory      = 2048
-      vcpu        = 2
-    },
-    "vm4" = {
-      vm_hostname = "vm1"
-      memory      = 2048
-      vcpu        = 2
+      role        = "worker"
+      disk_size   = 21474836480
     }
   }
+}
+
+variable "inventory_path" {
+  type        = string
+  description = "Path to the Ansible inventory file to be generated."
+  default     = "ansible/inventory/k8-clusters/inventory.ini"
+}
+
+variable "kubespray_playbook_path" {
+  type        = string
+  description = "Path to the main Kubespray cluster.yml playbook."
+  default     = "kubespray-integration/kubespray/cluster.yml"
 }
