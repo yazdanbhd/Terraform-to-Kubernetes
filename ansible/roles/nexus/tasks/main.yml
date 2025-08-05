@@ -1,0 +1,237 @@
+---
+# Role tasks: install and configure Nexus service on target host
+
+- name: Ensure packages (Debian/Ubuntu)
+  apt:
+    name: [ "{{ java_pkg }}", "curl", "tar" ]
+    update_cache: yes
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Ensure packages (RHEL-like)
+  yum:
+    name: [ "java-17-openjdk", "curl", "tar" ]
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Create nexus group
+  group:
+    name: "{{ nexus_group }}"
+    state: present
+
+- name: Create nexus user
+  user:
+    name: "{{ nexus_user }}"
+    group: "{{ nexus_group }}"
+    shell: /sbin/nologin
+    create_home: no
+    system: yes
+
+- name: Create install dir
+  file:
+    path: "{{ nexus_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Download Nexus tarball
+  get_url:
+    url: "{{ nexus_download_url }}"
+    dest: "/tmp/{{ nexus_tgz }}"
+    mode: "0644"
+    force: no
+
+- name: Unpack Nexus
+  unarchive:
+    src: "/tmp/{{ nexus_tgz }}"
+    dest: "{{ nexus_install_dir }}"
+    remote_src: yes
+    creates: "{{ nexus_home_dir }}"
+
+- name: Set ownership on install
+  file:
+    path: "{{ nexus_home_dir }}"
+    state: directory
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_group }}"
+    recurse: yes
+
+- name: Symlink current -> versioned dir
+  file:
+    src: "{{ nexus_home_dir }}"
+    dest: "{{ nexus_current_symlink }}"
+    state: link
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_group }}"
+
+- name: Ensure data dir
+  file:
+    path: "{{ nexus_data_dir }}"
+    state: directory
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_group }}"
+    mode: "0755"
+
+- name: Write nexus.properties
+  template:
+    src: "nexus.properties.j2"
+    dest: "{{ nexus_data_dir }}/etc/nexus.properties"
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_group }}"
+    mode: "0644"
+
+- name: Allow nexus to set run_as_user in rc
+  lineinfile:
+    path: "{{ nexus_current_symlink }}/bin/nexus.rc"
+    regexp: '^run_as_user='
+    line: "run_as_user={{ nexus_user }}"
+    create: yes
+  notify: Restart Nexus
+
+- name: Install systemd unit
+  template:
+    src: "nexus.service.j2"
+    dest: "/etc/systemd/system/nexus.service"
+    mode: "0644"
+
+- name: systemd daemon-reload
+  systemd:
+    daemon_reload: yes
+
+- name: Enable & start Nexus
+  systemd:
+    name: nexus
+    enabled: yes
+    state: started
+
+- name: Wait for Nexus UI to be reachable
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/status"
+    method: GET
+    status_code: 200
+  register: nexus_status
+  retries: 60
+  delay: 10
+  until: nexus_status.status == 200
+
+# --- Read initial admin password
+- name: Read initial admin password
+  slurp:
+    src: "{{ nexus_data_dir }}/admin.password"
+  register: admin_pw_raw
+  become: true
+
+- set_fact:
+    nexus_admin_initial_password: "{{ (admin_pw_raw.content | b64decode).strip() }}"
+    nexus_admin_new_password_eff: "{{ nexus_admin_new_password }}"
+
+# --- Idempotent password change
+- name: Try auth with new password (idempotency check)
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/status"
+    method: GET
+    force_basic_auth: yes
+    url_username: "admin"
+    url_password: "{{ nexus_admin_new_password_eff }}"
+    status_code: 200
+  register: auth_with_new
+  failed_when: false
+  changed_when: false
+
+- name: Change admin password if still default
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/security/users/admin/change-password"
+    method: PUT
+    force_basic_auth: yes
+    url_username: "admin"
+    url_password: "{{ nexus_admin_initial_password }}"
+    headers: { "Content-Type": "text/plain" }
+    body: "{{ nexus_admin_new_password_eff }}"
+    status_code: 204
+  when: auth_with_new.status != 200
+
+# --- Enable Docker Bearer Token Realm
+- name: Get active realms
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/security/realms/active"
+    method: GET
+    force_basic_auth: yes
+    url_username: "admin"
+    url_password: "{{ nexus_admin_new_password_eff }}"
+    return_content: yes
+  register: realms
+
+- name: Enable DockerToken realm if missing
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/security/realms/active"
+    method: PUT
+    force_basic_auth: yes
+    url_username: "admin"
+    url_password: "{{ nexus_admin_new_password_eff }}"
+    headers: { "Content-Type": "application/json" }
+    body_format: json
+    body: >-
+      {{
+        (realms.json if realms.json is defined else realms.content | from_json)
+        + ( ['DockerToken'] if ('DockerToken' not in (realms.json if realms.json is defined else realms.content | from_json)) else [] )
+      }}
+    status_code: [200, 204]
+  when: "'DockerToken' not in (realms.json if realms.json is defined else realms.content | from_json)"
+
+# --- Create Docker hosted repository on a dedicated port
+- name: List repositories
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/repositories"
+    method: GET
+    force_basic_auth: yes
+    url_username: "admin"
+    url_password: "{{ nexus_admin_new_password_eff }}"
+  register: repos
+
+- name: Create docker-hosted (HTTP)
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/repositories/docker/hosted"
+    method: POST
+    force_basic_auth: yes
+    url_username: "admin"
+    url_password: "{{ nexus_admin_new_password_eff }}"
+    headers: { "Content-Type": "application/json" }
+    body_format: json
+    body:
+      name: "docker-hosted"
+      online: true
+      storage:
+        blobStoreName: "default"
+        strictContentTypeValidation: true
+        writePolicy: "ALLOW"
+      docker:
+        v1Enabled: false
+        forceBasicAuth: true
+        httpPort: "{{ docker_http_port }}"
+        httpsPort: "{{ docker_https_port }}"
+    status_code: 201
+  when: docker_http_port is not none and (repos.json | map(attribute='name') | list) is not search('(^|,)docker-hosted(,|$)')
+
+# Optional: create HTTPS-bound docker repo
+- name: Create docker-hosted-https
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/repositories/docker/hosted"
+    method: POST
+    force_basic_auth: yes
+    url_username: "admin"
+    url_password: "{{ nexus_admin_new_password_eff }}"
+    headers: { "Content-Type": "application/json" }
+    body_format: json
+    body:
+      name: "docker-hosted-https"
+      online: true
+      storage:
+        blobStoreName: "default"
+        strictContentTypeValidation: true
+        writePolicy: "ALLOW"
+      docker:
+        v1Enabled: false
+        forceBasicAuth: true
+        httpPort: null
+        httpsPort: "{{ docker_https_port }}"
+    status_code: 201
+  when: docker_https_port is not none and (repos.json | map(attribute='name') | list) is not search('(^|,)docker-hosted-https(,|$)')

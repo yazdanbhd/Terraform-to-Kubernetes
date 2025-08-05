@@ -1,0 +1,10 @@
+---
+
+- name: Restart Nexus
+  systemd:
+    name: nexus
+    state: restarted
+    enabled: yes
+    daemon_reload: yes
+
+

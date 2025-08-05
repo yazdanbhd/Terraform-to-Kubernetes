@@ -1,0 +1,29 @@
+---
+# Sensible defaults for Nexus role (can be overridden via inventory/group_vars)
+
+# Version & download
+nexus_version: "3.82.0-08"
+nexus_base_url: "https://download.sonatype.com/nexus/3"
+nexus_tgz: "nexus-{{ nexus_version }}-linux-x86_64.tar.gz"
+nexus_download_url: "{{ nexus_base_url }}/{{ nexus_tgz }}"
+
+# Paths / users
+nexus_user: "nexus"
+nexus_group: "nexus"
+nexus_install_dir: "/opt"
+nexus_home_dir: "{{ nexus_install_dir }}/nexus-{{ nexus_version }}"
+nexus_current_symlink: "{{ nexus_install_dir }}/nexus"
+nexus_data_dir: "/opt/sonatype-work/nexus3"
+
+# Ports
+nexus_ui_port: 8081
+docker_http_port: 5000
+docker_https_port: null
+
+# Admin password rotation
+nexus_admin_new_password: "ChangeMe_123!"
+
+# Java (package name differs by distro family; tasks gate on ansible_os_family)
+java_pkg: "openjdk-17-jdk"
+
+

@@ -1,0 +1,13 @@
+# Managed by Ansible
+# Nexus application properties
+
+# Jetty / UI listen port
+application-port={{ nexus_ui_port }}
+
+# Application host (0.0.0.0 to listen on all interfaces)
+application-host=0.0.0.0
+
+# Data directory
+karaf.data={{ nexus_data_dir }}
+
+

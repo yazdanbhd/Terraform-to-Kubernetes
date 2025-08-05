@@ -1,0 +1,297 @@
+---
+
+- name: Configure Nexus repositories
+  gather_facts: false
+  hosts: localhost
+  vars:
+    nexus_host: "https://nexus.403unlocker.ir"
+    nexus_user: "{{ lookup('env', 'NEXUS_USER') }}"
+    nexus_password: "{{ lookup('env', 'NEXUS_PASSWORD') }}"
+    common_headers:
+      Content-Type: "application/json"
+  tasks:
+    # -------------------------------------------------------------------------
+    # Docker proxy repositories
+    # -------------------------------------------------------------------------
+    - name: Create docker-io proxy repository (Docker Hub)
+      uri:
+        url: "{{ nexus_host }}/service/rest/v1/repositories/docker/proxy"
+        method: POST
+        user: "{{ nexus_user }}"
+        password: "{{ nexus_password }}"
+        force_basic_auth: yes
+        status_code: [201, 400]
+        headers: "{{ common_headers }}"
+        body_format: json
+        body:
+          name: "docker-io"
+          online: true
+          storage:
+            blobStoreName: "default"
+            strictContentTypeValidation: true
+          proxy:
+            remoteUrl: "https://registry-1.docker.io"
+            blocked: false
+            contentMaxAge: -1      # unlimited component caching
+            metadataMaxAge: 1440   # metadata cached for 1440 minutes (24h)
+            autoBlock: true
+          docker:
+            v1Enabled: false
+            httpPort: 5001
+            forceBasicAuth: false
+          negativeCache:
+            enabled: true
+            timeToLive: 1440
+          httpClient:
+            blocked: false
+            autoBlock: true
+            connection:
+              retries: 0
+        # The Nexus API returns 400 if the repository already exists; ignore that case
+        # so the play can be re-run safely.
+      ignore_errors: true
+
+    - name: Create gcr proxy repository (Google Container Registry)
+      uri:
+        url: "{{ nexus_host }}/service/rest/v1/repositories/docker/proxy"
+        method: POST
+        user: "{{ nexus_user }}"
+        password: "{{ nexus_password }}"
+        force_basic_auth: yes
+        status_code: [201, 400]
+        headers: "{{ common_headers }}"
+        body_format: json
+        body:
+          name: "gcr"
+          online: true
+          storage:
+            blobStoreName: "default"
+            strictContentTypeValidation: true
+          proxy:
+            remoteUrl: "https://gcr.io"
+            blocked: false
+            contentMaxAge: -1
+            metadataMaxAge: 1440
+            autoBlock: true
+          docker:
+            v1Enabled: false
+            httpPort: 5002
+            forceBasicAuth: false
+          negativeCache:
+            enabled: true
+            timeToLive: 1440
+          httpClient:
+            blocked: false
+            autoBlock: true
+            connection:
+              retries: 0
+      ignore_errors: true
+
+    - name: Create ghcr proxy repository (GitHub Container Registry)
+      uri:
+        url: "{{ nexus_host }}/service/rest/v1/repositories/docker/proxy"
+        method: POST
+        user: "{{ nexus_user }}"
+        password: "{{ nexus_password }}"
+        force_basic_auth: yes
+        status_code: [201, 400]
+        headers: "{{ common_headers }}"
+        body_format: json
+        body:
+          name: "ghcr"
+          online: true
+          storage:
+            blobStoreName: "default"
+            strictContentTypeValidation: true
+          proxy:
+            remoteUrl: "https://ghcr.io"
+            blocked: false
+            contentMaxAge: -1
+            metadataMaxAge: 1440
+            autoBlock: true
+          docker:
+            v1Enabled: false
+            httpPort: 5004
+            forceBasicAuth: false
+          negativeCache:
+            enabled: true
+            timeToLive: 1440
+          httpClient:
+            blocked: false
+            autoBlock: true
+            connection:
+              retries: 0
+      ignore_errors: true
+
+    - name: Create quay proxy repository (Quay.io)
+      uri:
+        url: "{{ nexus_host }}/service/rest/v1/repositories/docker/proxy"
+        method: POST
+        user: "{{ nexus_user }}"
+        password: "{{ nexus_password }}"
+        force_basic_auth: yes
+        status_code: [201, 400]
+        headers: "{{ common_headers }}"
+        body_format: json
+        body:
+          name: "quay"
+          online: true
+          storage:
+            blobStoreName: "default"
+            strictContentTypeValidation: true
+          proxy:
+            remoteUrl: "https://quay.io"
+            blocked: false
+            contentMaxAge: -1
+            metadataMaxAge: 1440
+            autoBlock: true
+          docker:
+            v1Enabled: false
+            httpPort: 5003
+            forceBasicAuth: false
+          negativeCache:
+            enabled: true
+            timeToLive: 1440
+          httpClient:
+            blocked: false
+            autoBlock: true
+            connection:
+              retries: 0
+      ignore_errors: true
+
+    - name: Create registry.k8s.io proxy repository (Kubernetes image registry)
+      uri:
+        url: "{{ nexus_host }}/service/rest/v1/repositories/docker/proxy"
+        method: POST
+        user: "{{ nexus_user }}"
+        password: "{{ nexus_password }}"
+        force_basic_auth: yes
+        status_code: [201, 400]
+        headers: "{{ common_headers }}"
+        body_format: json
+        body:
+          name: "registry.k8s.io"
+          online: true
+          storage:
+            blobStoreName: "default"
+            strictContentTypeValidation: true
+          proxy:
+            remoteUrl: "https://registry.k8s.io/"
+            blocked: false
+            contentMaxAge: -1
+            metadataMaxAge: 1440
+            autoBlock: false      # auto-blocking disabled as seen in UI
+          docker:
+            v1Enabled: false
+            # HTTP connector disabled – leave httpPort undefined to match UI
+            forceBasicAuth: false
+          negativeCache:
+            enabled: true
+            timeToLive: 1440
+          httpClient:
+            blocked: false
+            autoBlock: false
+            connection:
+              retries: 0
+      ignore_errors: true
+
+    # -------------------------------------------------------------------------
+    # Docker group repository
+    # Combines multiple docker proxies to provide a single endpoint for air‑gapped
+    # clusters. The HTTP port is exposed on 5000 to mirror the UI.
+    # -------------------------------------------------------------------------
+    - name: Create docker-all group repository
+      uri:
+        url: "{{ nexus_host }}/service/rest/v1/repositories/docker/group"
+        method: POST
+        user: "{{ nexus_user }}"
+        password: "{{ nexus_password }}"
+        force_basic_auth: yes
+        status_code: [201, 400]
+        headers: "{{ common_headers }}"
+        body_format: json
+        body:
+          name: "docker-all"
+          online: true
+          storage:
+            blobStoreName: "default"
+            strictContentTypeValidation: true
+          group:
+            memberNames:
+              - "docker-io"
+              - "gcr"
+              - "quay"
+              - "ghcr"
+              - "registry.k8s.io"
+          docker:
+            httpPort: 5000
+            v1Enabled: false
+            forceBasicAuth: false
+      ignore_errors: true
+
+    # -------------------------------------------------------------------------
+    # Raw proxy repositories for files
+    # -------------------------------------------------------------------------
+    - name: Create dl.k8s.io raw proxy repository
+      uri:
+        url: "{{ nexus_host }}/service/rest/v1/repositories/raw/proxy"
+        method: POST
+        user: "{{ nexus_user }}"
+        password: "{{ nexus_password }}"
+        force_basic_auth: yes
+        status_code: [201, 400]
+        headers: "{{ common_headers }}"
+        body_format: json
+        body:
+          name: "dl.k8s.io"
+          online: true
+          storage:
+            blobStoreName: "default"
+            strictContentTypeValidation: true
+          proxy:
+            remoteUrl: "https://dl.k8s.io/"
+            blocked: false
+            contentMaxAge: -1
+            metadataMaxAge: 1440
+            autoBlock: true
+          negativeCache:
+            enabled: true
+            timeToLive: 1440
+          httpClient:
+            blocked: false
+            autoBlock: true
+            connection:
+              retries: 0
+      ignore_errors: true
+
+    - name: Create github.com raw proxy repository
+      uri:
+        url: "{{ nexus_host }}/service/rest/v1/repositories/raw/proxy"
+        method: POST
+        user: "{{ nexus_user }}"
+        password: "{{ nexus_password }}"
+        force_basic_auth: yes
+        status_code: [201, 400]
+        headers: "{{ common_headers }}"
+        body_format: json
+        body:
+          name: "github.com"
+          online: true
+          storage:
+            blobStoreName: "default"
+            strictContentTypeValidation: true
+          proxy:
+            remoteUrl: "https://github.com/"
+            blocked: false
+            contentMaxAge: -1
+            metadataMaxAge: 1440
+            autoBlock: true
+          negativeCache:
+            enabled: true
+            timeToLive: 1440
+          httpClient:
+            blocked: false
+            autoBlock: true
+            connection:
+              retries: 0
+      ignore_errors: true
