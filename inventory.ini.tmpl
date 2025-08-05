@@ -1,0 +1,23 @@
+[all]
+%{ for vm in all_vms ~}
+${vm.hostname} ansible_host=${vm.ip} ip=${vm.ip} ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/yazdan_popos %{ if vm.is_etcd }etcd_member_name=${vm.hostname}%{ endif }
+%{ endfor ~}
+
+[kube_control_plane]
+%{ for vm in control_plane_vms ~}
+${vm.hostname}
+%{ endfor ~}
+
+[etcd]
+%{ for vm in control_plane_vms ~}
+${vm.hostname}
+%{ endfor ~}
+
+[kube_node]
+%{ for vm in all_vms ~}
+${vm.hostname}
+%{ endfor ~}
+
+[k8s_cluster:children]
+kube_control_plane
+kube_node

@@ -1,0 +1,92 @@
+---
+- name: Deploy Kubernetes with Kubespray
+  hosts: localhost
+  gather_facts: false
+  vars:
+    terraform_output_file: "{{ playbook_dir }}/terraform_output.json"
+    inventory_dir: "{{ playbook_dir }}/inventory/yazdan"
+    
+  tasks:
+    - name: Check if Terraform state exists
+      stat:
+        path: "{{ playbook_dir }}/terraform.tfstate"
+      register: tf_state_check
+      
+    - name: Fail if Terraform state not found
+      fail:
+        msg: "Terraform state not found. Please run 'terraform apply' first."
+      when: not tf_state_check.stat.exists
+      
+    - name: Get Terraform outputs
+      command: terraform output -json
+      register: terraform_output
+      changed_when: false
+      
+    - name: Save Terraform outputs to file
+      copy:
+        content: "{{ terraform_output.stdout }}"
+        dest: "{{ terraform_output_file }}"
+        mode: '0644'
+        
+    - name: Parse Terraform outputs
+      set_fact:
+        vm_ips: "{{ terraform_output.stdout | from_json }}"
+        
+    - name: Check if VMs are ready
+      fail:
+        msg: "VMs are not ready yet. Please wait for them to be fully started."
+      when: 
+        - vm_ips.vm_details is defined
+        - vm_ips.vm_details.control_plane.ip == "IP not assigned yet" or vm_ips.vm_details.worker1.ip == "IP not assigned yet"
+        
+    - name: Display VM information
+      debug:
+        msg: |
+          VMs ready for deployment:
+          Control Plane: {{ vm_ips.vm_details.control_plane.ip }}
+          Worker1: {{ vm_ips.vm_details.worker1.ip }}
+          
+    - name: Update inventory with actual IPs
+      template:
+        src: inventory-template.ini.j2
+        dest: "{{ inventory_dir }}/inventory.ini"
+        mode: '0644'
+        
+    - name: Display updated inventory
+      debug:
+        msg: "Inventory updated successfully"
+        
+    - name: Check if Kubespray directory exists
+      stat:
+        path: "{{ playbook_dir }}/kubespray-integration/kubespray"
+      register: kubespray_check
+      
+    - name: Fail if Kubespray not found
+      fail:
+        msg: "Kubespray directory not found at {{ playbook_dir }}/kubespray-integration/kubespray"
+      when: not kubespray_check.stat.exists
+      
+    - name: Deploy Kubernetes with Kubespray
+      command: ansible-playbook -i "{{ inventory_dir }}/inventory.ini" cluster.yml
+      args:
+        chdir: "{{ playbook_dir }}/kubespray-integration/kubespray"
+        creates: "{{ inventory_dir }}/artifacts/kubeconfig"
+        
+    - name: Copy kubeconfig
+      copy:
+        src: "{{ inventory_dir }}/artifacts/kubeconfig"
+        dest: "{{ playbook_dir }}/kubeconfig"
+        mode: '0600'
+        remote_src: yes
+      register: kubeconfig_copy
+      
+    - name: Verify cluster deployment
+      command: kubectl --kubeconfig "{{ playbook_dir }}/kubeconfig" get nodes
+      register: cluster_status
+      changed_when: false
+      when: kubeconfig_copy.changed
+      
+    - name: Display cluster status
+      debug:
+        msg: "{{ cluster_status.stdout_lines }}"
+      when: cluster_status is defined
