@@ -1,4 +1,4 @@
-# Setting up a QEMU/KVM Virtual Machine with Libvirt using Terraform
+# Setting up a QEMU/KVM Virtual Machine with Libvirt using Terraform then Deploy Kubernetes on them.
 
 This guide will help you set up a virtual machine using QEMU/KVM with libvirt through Terraform.
 
@@ -100,18 +100,6 @@ If you need to remove the VM, use:
 ```sh
 terraform destroy -auto-approve
 ```
-
-## Setup Script
-
-The repository includes an automated setup script (`script/setup-libvirt.sh`) that handles the initial configuration of your system for libvirt and QEMU/KVM. This script:
-
-- **Installs Dependencies**: Automatically installs `qemu-kvm`, `libvirt-daemon-system`, and `virt-manager`
-- **Configures Storage Pool**: Creates and configures the default storage pool at `/var/lib/libvirt/images/default`
-- **Sets Permissions**: Ensures proper ownership and permissions for the storage pool
-- **Downloads Cloud Image**: Downloads the Ubuntu Jammy (22.04) cloud image and resizes it by +50G
-- **User Configuration**: Adds your user to the libvirt group for proper access
-
-The script provides the absolute path of the downloaded image, which you can use directly in your `variables.tf` file.
 
 ## Ansible: Deploying Nexus Repository Manager
 
