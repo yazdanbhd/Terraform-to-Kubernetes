@@ -113,11 +113,6 @@ The repository includes an automated setup script (`script/setup-libvirt.sh`) th
 
 The script provides the absolute path of the downloaded image, which you can use directly in your `variables.tf` file.
 
-## Acknowledgment
-Special thanks to **Molla Salehi** (GitHub: [mm3906078](https://github.com/mm3906078)) for contributions and guidance.
-
-
-
 ## Ansible: Deploying Nexus Repository Manager
 
 This repository includes an Ansible role to install and configure Nexus Repository Manager on a host. Two approaches exist in the repo today; the recommended one is the role-based install.
