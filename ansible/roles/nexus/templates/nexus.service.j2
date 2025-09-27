@@ -7,12 +7,12 @@ Type=forking
 LimitNOFILE=65536
 User={{ nexus_user }}
 Group={{ nexus_group }}
-Environment=INSTALL4J_ADD_VM_PARAMS=-Xms1200m -Xmx1200m -XX:MaxDirectMemorySize=2g
-Environment=JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+Environment=INSTALL4J_ADD_VM_PARAMS=-Xms1024m -Xmx2048m -XX:MaxDirectMemorySize=2g
+Environment=JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 Environment=NEXUS_HOME={{ nexus_current_symlink }}
 Environment=NEXUS_DATA={{ nexus_data_dir }}
-ExecStart={{ nexus_current_symlink }}/bin/nexus start
-ExecStop={{ nexus_current_symlink }}/bin/nexus stop
+ExecStart=/bin/bash {{ nexus_current_symlink }}/bin/nexus start
+ExecStop=/bin/bash {{ nexus_current_symlink }}/bin/nexus stop
 Restart=on-abort
 TimeoutSec=600
 

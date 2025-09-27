@@ -1,19 +1,23 @@
 ---
-# Role tasks: install and configure Nexus service on target host
-
-- name: Ensure packages (Debian/Ubuntu)
+- name: Update apt cache
   apt:
-    name: [ "{{ java_pkg }}", "curl", "tar" ]
     update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Install Java
+  package:
+    name: "openjdk-11-jdk"
     state: present
   when: ansible_os_family == "Debian"
 
-- name: Ensure packages (RHEL-like)
-  yum:
-    name: [ "java-17-openjdk", "curl", "tar" ]
+- name: Install Java (RedHat family)
+  package:
+    name: "{{ java_pkg }}"
     state: present
   when: ansible_os_family == "RedHat"
 
+# Create nexus user and group
 - name: Create nexus group
   group:
     name: "{{ nexus_group }}"
@@ -23,54 +27,60 @@
   user:
     name: "{{ nexus_user }}"
     group: "{{ nexus_group }}"
-    shell: /sbin/nologin
-    create_home: no
+    home: "{{ nexus_data_dir }}"
+    shell: /bin/bash
     system: yes
+    state: present
 
-- name: Create install dir
+# Create directories
+- name: Create nexus install directory
   file:
     path: "{{ nexus_install_dir }}"
     state: directory
-    mode: "0755"
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_group }}"
+    mode: '0755'
 
-- name: Download Nexus tarball
+- name: Create nexus data directory
+  file:
+    path: "{{ nexus_data_dir }}"
+    state: directory
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_group }}"
+    mode: '0755'
+
+- name: Download Nexus
   get_url:
     url: "{{ nexus_download_url }}"
     dest: "/tmp/{{ nexus_tgz }}"
-    mode: "0644"
-    force: no
+    mode: '0644'
+  become: true
 
-- name: Unpack Nexus
+# Extract and install Nexus
+- name: Extract Nexus
   unarchive:
     src: "/tmp/{{ nexus_tgz }}"
     dest: "{{ nexus_install_dir }}"
     remote_src: yes
-    creates: "{{ nexus_home_dir }}"
-
-- name: Set ownership on install
-  file:
-    path: "{{ nexus_home_dir }}"
-    state: directory
     owner: "{{ nexus_user }}"
     group: "{{ nexus_group }}"
-    recurse: yes
+  become: true
 
-- name: Symlink current -> versioned dir
+- name: Create nexus symlink
   file:
     src: "{{ nexus_home_dir }}"
     dest: "{{ nexus_current_symlink }}"
     state: link
     owner: "{{ nexus_user }}"
     group: "{{ nexus_group }}"
+  become: true
 
-- name: Ensure data dir
+- name: Clean up downloaded archive
   file:
-    path: "{{ nexus_data_dir }}"
-    state: directory
-    owner: "{{ nexus_user }}"
-    group: "{{ nexus_group }}"
-    mode: "0755"
+    path: "/tmp/{{ nexus_tgz }}"
+    state: absent
 
+# Configure Nexus
 - name: Write nexus.properties
   template:
     src: "nexus.properties.j2"
@@ -78,6 +88,7 @@
     owner: "{{ nexus_user }}"
     group: "{{ nexus_group }}"
     mode: "0644"
+  notify: Restart Nexus
 
 - name: Allow nexus to set run_as_user in rc
   lineinfile:
@@ -87,21 +98,27 @@
     create: yes
   notify: Restart Nexus
 
+# Install systemd service
 - name: Install systemd unit
   template:
     src: "nexus.service.j2"
     dest: "/etc/systemd/system/nexus.service"
     mode: "0644"
+  become: true
+  notify: Restart Nexus
 
 - name: systemd daemon-reload
   systemd:
     daemon_reload: yes
+  become: true
 
+# Start Nexus service
 - name: Enable & start Nexus
   systemd:
     name: nexus
     enabled: yes
     state: started
+  become: true
 
 - name: Wait for Nexus UI to be reachable
   uri:
@@ -149,7 +166,37 @@
     status_code: 204
   when: auth_with_new.status != 200
 
-# --- Enable Docker Bearer Token Realm
+# Accept Nexus EULA (required for proxy repositories)
+- name: Check if EULA has been accepted
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/system/eula"
+    method: GET
+    force_basic_auth: yes
+    url_username: "admin"
+    url_password: "{{ nexus_admin_new_password_eff }}"
+    return_content: yes
+    status_code: [200, 404]
+  register: eula_status
+  failed_when: false
+
+- name: Accept EULA (basic auth approach)
+  uri:
+    url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/system/eula"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      accepted: true
+    force_basic_auth: yes
+    url_username: "admin"
+    url_password: "{{ nexus_admin_new_password_eff }}"
+    status_code: [200, 204]
+  register: eula_result
+  when: eula_status.status != 200 or (eula_status.json is defined and not eula_status.json.accepted)
+  failed_when: false
+
+# Enable Docker Bearer Token Realm
 - name: Get active realms
   uri:
     url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/security/realms/active"
@@ -177,7 +224,7 @@
     status_code: [200, 204]
   when: "'DockerToken' not in (realms.json if realms.json is defined else realms.content | from_json)"
 
-# --- Create Docker hosted repository on a dedicated port
+# Create Docker hosted repository on a dedicated port
 - name: List repositories
   uri:
     url: "http://localhost:{{ nexus_ui_port }}/service/rest/v1/repositories"

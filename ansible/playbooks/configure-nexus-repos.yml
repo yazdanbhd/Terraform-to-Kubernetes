@@ -1,12 +1,12 @@
 ---
 
 - name: Configure Nexus repositories
-  gather_facts: false
-  hosts: localhost
+  gather_facts: true
+  hosts: nexus
   vars:
-    nexus_host: "https://nexus.403unlocker.ir"
-    nexus_user: "{{ lookup('env', 'NEXUS_USER') }}"
-    nexus_password: "{{ lookup('env', 'NEXUS_PASSWORD') }}"
+    nexus_host: "http://localhost:8081"
+    nexus_user: "admin"
+    nexus_password: "{{ nexus_admin_new_password }}"
     common_headers:
       Content-Type: "application/json"
   tasks:
@@ -39,6 +39,9 @@
             v1Enabled: false
             httpPort: 5001
             forceBasicAuth: false
+          dockerProxy:
+            indexType: "HUB"
+            indexUrl: "https://registry-1.docker.io"
           negativeCache:
             enabled: true
             timeToLive: 1440
@@ -77,6 +80,9 @@
             v1Enabled: false
             httpPort: 5002
             forceBasicAuth: false
+          dockerProxy:
+            indexType: "REGISTRY"
+            indexUrl: "https://gcr.io"
           negativeCache:
             enabled: true
             timeToLive: 1440
@@ -113,6 +119,9 @@
             v1Enabled: false
             httpPort: 5004
             forceBasicAuth: false
+          dockerProxy:
+            indexType: "REGISTRY"
+            indexUrl: "https://ghcr.io"
           negativeCache:
             enabled: true
             timeToLive: 1440
@@ -149,6 +158,9 @@
             v1Enabled: false
             httpPort: 5003
             forceBasicAuth: false
+          dockerProxy:
+            indexType: "REGISTRY"
+            indexUrl: "https://quay.io"
           negativeCache:
             enabled: true
             timeToLive: 1440
@@ -185,6 +197,9 @@
             v1Enabled: false
             # HTTP connector disabled – leave httpPort undefined to match UI
             forceBasicAuth: false
+          dockerProxy:
+            indexType: "REGISTRY"
+            indexUrl: "https://registry.k8s.io/"
           negativeCache:
             enabled: true
             timeToLive: 1440
@@ -224,7 +239,7 @@
               - "ghcr"
               - "registry.k8s.io"
           docker:
-            httpPort: 5000
+            httpPort: 5005
             v1Enabled: false
             forceBasicAuth: false
       ignore_errors: true
